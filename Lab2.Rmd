@@ -1,0 +1,204 @@
+---
+title: "Lab 2 - Stats 503"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+## Functional programming
+
+
+```{r}
+data_crime = read.table("citycrime.txt", header = TRUE)
+```
+
+Sapply, apply, vapply and lapply
+```{r, echo=FALSE}
+colMeans(data_crime)
+sapply(data_crime, mean)
+apply(data_crime, 2, mean)
+vapply(data_crime, mean, double(1))
+lapply(data_crime, mean)
+
+```
+
+Descriptive statistics
+```{r}
+summary_stats = function(x) {
+  return(c(mean = mean(x),
+              sd = sd(x),
+              max = max(x),
+              min = min(x),
+              med = median(x)))
+}
+
+crime_stats = lapply(data_crime, summary_stats)
+```
+
+Cities with highest crime rates
+```{r}
+cities = rownames(data_crime)
+
+max_city = function(x) {
+  cities[which.min(x)]
+}
+sapply(data_crime, max_city)
+```
+
+Parallel
+```{r}
+#library(parallel)
+#wait = function() {
+#  Sys.sleep(3)
+# }
+# no_cores <- detectCores() - 1
+# cl <- makeCluster(no_cores)
+# 
+# parLapply(cl, 1:no_cores, wait())
+# 
+# stopCluster(cl)
+```
+
+Map function - weighted average
+```{r}
+cost_per_city = replicate(7, runif(length(cities)), simplify = FALSE) 
+Map(weighted.mean, data_crime, cost_per_city)
+```
+
+Reduce and filter
+```{r}
+top10_cities = lapply(data_crime, function(x) cities[order(x, decreasing = T)[1:10]])
+
+intersect(intersect(intersect(top10_cities$Murder, top10_cities$Rape), top10_cities$Robbery), top10_cities$Assault) #... and so on
+
+Reduce(intersect, top10_cities)
+
+Filter(function(x) "Detroit" %in% x, top10_cities)
+```
+Position() and Find()
+
+
+## Visualization using ggplot
+
+
+```{r}
+plot(x = data_crime$Robbery, y = data_crime$Assault)
+```
+
+Quick plot
+```{r}
+library(ggplot2)
+qplot(x = Robbery, y = Assault, data = data_crime)
+```
+
+ggplot standard functions
+```{r}
+crime_plot = ggplot(data_crime, aes(x = Robbery, y = Assault))
+crime_plot + geom_point()
+```
+
+```{r}
+crime_plot + geom_point(aes(color = Murder, size = Larceny))
+```
+
+```{r}
+crime_plot + geom_point(aes(color = Murder)) + 
+  scale_colour_gradient(high = "red", low = "blue") + theme_bw()
+
+```
+
+
+```{r}
+crime_plot + geom_text(aes(label=rownames(data_crime)), check_overlap = TRUE)
+```
+
+3d plot
+```{r,warning=FALSE}
+#install.packages("plotly")
+library(plotly)
+p <- plot_ly(data_crime, x = ~Robbery, y = ~Assault, z = ~Murder)
+p
+```
+
+pairs
+```{r}
+library(GGally)
+crime_pairs = ggpairs(data_crime,axisLabels = "none",
+        upper = list(continuous = "points", combo = "dot"),
+        lower = list(continuous = "cor", combo = "dot"),
+        diag = list(continuous = "densityDiag")) + 
+  theme_bw()
+crime_pairs
+```
+
+
+```{r}
+pdf("crime_ggpairs.pdf")
+crime_pairs
+dev.off()
+```
+
+## Exercises
+
+Work in pairs to solve the next questions. In all problems, try to use functional programming when possible, and ggplot.
+
+1. Simulate data from a multivariate normal distribution wih mean 0 and covariance diag($3^2, 2^2,1,1,\ldots$) using p=20 variables and n=100 observations. Compute the eigenvalues of the sample covariance and plot them.
+
+2. Create a list containing different versions of the simulated data varying the number of observations on each one, from 100 to 2000. For each element in the list, compute the SVD and calculate the running time. Store the results on an array. Plot the running times as a function of the number of observations. (You can use proc.time()).
+
+3. Repeat the previous problem, but using the eigendecomposition of the covariance matrix.
+
+4. Repeat 2 and 3, but instead of varying the number of observations, change the number of variables from 100 to 2000.
+
+```{r}
+sample = matrix(rnorm(1000*10), ncol = 10)
+p = 20
+n = 100
+X = sweep(matrix(rnorm(n*p),ncol = p), 2, c(3,2,rep(1,p-2)), "*")
+eigenvalues = eigen(cov(X))$values
+qplot(y=eigenvalues, xlab="Index", ylab="Eigenvalues")
+```
+
+
+
+
+
+```{r}
+generate_data = function(n, p) {
+  X <- sweep(matrix(rnorm(n*p),ncol = p), 2, c(3,2,rep(1,p-2)), "*")
+}
+
+compute_svd = function(X) {
+  start = proc.time()
+  X = scale(X, center = TRUE, scale = FALSE)
+  eigenvalues = svd(X)$d^2/(nrow(X)-1)
+  end = proc.time()
+  return(end[3] - start[3])
+}
+
+data_obs = lapply(seq(100, 5000, 100), generate_data, p = 100)
+svd_times = sapply(data_obs, compute_svd) 
+qplot(y = svd_times, main = "SVD", xlab = "Observations", ylab = "Running time")
+
+```
+
+
+```{r}
+compute_eig = function(X) {
+  start = proc.time()
+  eigenvalues = eigen(cov(X))$values
+  end = proc.time()
+  return(end[3] - start[3])
+}
+eig_times = sapply(data_obs, compute_eig) 
+qplot(y = eig_times, main = "Eig", xlab = "Observations", ylab = "Running time")
+```
+
+```{r}
+data_var = lapply(seq(100, 2000, 100), generate_data, n = 100)
+svd_times = sapply(data_var, compute_svd) 
+qplot(y = svd_times, main = "SVD", xlab = "Variables", ylab = "Running time")
+eig_times = sapply(data_var, compute_eig) 
+qplot(y = eig_times, main = "Eig", xlab = "Variables", ylab = "Running time")
+```
+

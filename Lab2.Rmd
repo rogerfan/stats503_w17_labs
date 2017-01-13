@@ -102,7 +102,6 @@ The function <tt>ddply</tt> is similar to <tt>apply</tt>, but it takes as input 
 ```{r, eval=FALSE}
 ddply(long_data_crime, c("City"), function(df) mean(df$value))
 ddply(long_data_crime, c("City"), summarize, mean_city =mean(value), sd_city = sd(value))
-ddply(long_data_crime, c("City"), summarize, mean_city =mean(value), sd_city = sd(value))
 ```
 
 ## Visualization using ggplot
@@ -188,8 +187,10 @@ Work in pairs to solve the next questions. In all problems, try to use functiona
 
 4. Repeat 2 and 3, but instead of varying the number of observations, change the number of variables from 100 to 2000.
 
-```{r, echo=FALSE}
-sample = matrix(rnorm(1000*10), ncol = 10)
+
+## Solutions
+
+```{r}
 p = 20
 n = 100
 X = sweep(matrix(rnorm(n*p),ncol = p), 2, c(3,2,rep(1,p-2)), "*")
@@ -201,7 +202,7 @@ qplot(y=eigenvalues, xlab="Index", ylab="Eigenvalues")
 
 
 
-```{r, echo=FALSE}
+```{r}
 generate_data = function(n, p) {
   X = sweep(matrix(rnorm(n*p),ncol = p), 2, c(3,2,rep(1,p-2)), "*")
 }
@@ -221,7 +222,7 @@ qplot(y = svd_times, main = "SVD", xlab = "Observations", ylab = "Running time")
 ```
 
 
-```{r,cache=TRUE, echo=FALSE}
+```{r,cache=TRUE}
 compute_eig = function(X) {
   start = proc.time()
   eigenvalues = eigen(cov(X))$values
@@ -232,7 +233,7 @@ eig_times = sapply(data_obs, compute_eig)
 qplot(y = eig_times, main = "Eig", xlab = "Observations", ylab = "Running time")
 ```
 
-```{r,cache=TRUE,echo=FALSE}
+```{r,cache=TRUE}
 data_var = lapply(seq(100, 2000, 100), generate_data, n = 100)
 svd_times = sapply(data_var, compute_svd) 
 qplot(y = svd_times, main = "SVD", xlab = "Variables", ylab = "Running time")

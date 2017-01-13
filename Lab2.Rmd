@@ -112,7 +112,7 @@ plot(x = data_crime$Robbery, y = data_crime$Assault)
 ```
 
 The function <tt>qplot</tt> (quick plot) is an equivalent to <tt>plot</tt>. Useful to create simple plots, but it has a limited functionality.
-```{r}
+```{r,message=FALSE}
 library(ggplot2)
 qplot(x=Robbery, data = data_crime, geom="histogram")
 qplot(x = Robbery, y = Assault, data = data_crime)
@@ -140,7 +140,7 @@ crime_plot + geom_text(aes(label=rownames(data_crime)), check_overlap = TRUE)
 ```
 
 Sometimes it is useful to create 3D plots to visualize multivariate data. The library <tt>plotly</tt>  can do so.
-```{r,warning=FALSE}
+```{r,warning=FALSE,message=FALSE,error=FALSE}
 #install.packages("plotly")
 library(plotly)
 p = plot_ly(data_crime, x = ~Robbery, y = ~Assault, z = ~Murder)

@@ -7,22 +7,23 @@ output:
 
 ## Functional programming
 
-
+Download from Canvas the data file "citycrime.txt", which shows crime rates per 100,000 people on some US cities. 
 ```{r}
 data_crime = read.table("citycrime.txt", header = TRUE)
 ```
 
-Sapply, apply, vapply and lapply
-```{r, echo=FALSE}
+The functions <tt>sapply</tt>,  <tt>lapply</tt>, <tt>apply</tt> and <tt>vapply</tt> can apply a function to each element of an object, but the output and syntax is different. These functions are called *functionals*.
+
+```{r, eval=FALSE}
 colMeans(data_crime)
 sapply(data_crime, mean)
+lapply(data_crime, mean)
 apply(data_crime, 2, mean)
 vapply(data_crime, mean, double(1))
-lapply(data_crime, mean)
 
 ```
 
-Descriptive statistics
+Examples with user-defined functions to calculate descriptive statistics.
 ```{r}
 summary_stats = function(x) {
   return(c(mean = mean(x),
@@ -34,38 +35,37 @@ summary_stats = function(x) {
 
 crime_stats = lapply(data_crime, summary_stats)
 ```
-
-Cities with highest crime rates
+Calculate the cities with higher crime rates.
 ```{r}
 cities = rownames(data_crime)
 
 max_city = function(x) {
-  cities[which.min(x)]
+  cities[which.max(x)]
 }
 sapply(data_crime, max_city)
 ```
 
-Parallel
-```{r}
-#library(parallel)
-#wait = function() {
-#  Sys.sleep(3)
-# }
-# no_cores <- detectCores() - 1
-# cl <- makeCluster(no_cores)
-# 
-# parLapply(cl, 1:no_cores, wait())
-# 
-# stopCluster(cl)
+It is very easy to implement parallel programming using functionals.
+```{r, eval=FALSE}
+library(parallel)
+wait = function(x) {
+   mean(x)
+   Sys.sleep(20)
+}
+num_cores = detectCores() - 1
+cl = makeCluster(num_cores)
+parLapply(cl, data_crime, wait)
+stopCluster(cl)
 ```
 
-Map function - weighted average
-```{r}
+The <tt>Map</tt> function is similar to <tt>lapply</tt> but it apply the function to the elements of multiple arguments. An example to calculate a weighted mean.
+```{r, eval=FALSE}
 cost_per_city = replicate(7, runif(length(cities)), simplify = FALSE) 
 Map(weighted.mean, data_crime, cost_per_city)
 ```
 
-Reduce and filter
+<tt>Reduce</tt> succesively combines the elements of a a vector. <tt>Filter</tt> applies a logical function to the elements of a list and returns those that satisfy the condition. There are more functionals for different purposes (<tt>Position</tt>, <tt>Find</tt>, etc.).
+
 ```{r}
 top10_cities = lapply(data_crime, function(x) cities[order(x, decreasing = T)[1:10]])
 
@@ -75,23 +75,50 @@ Reduce(intersect, top10_cities)
 
 Filter(function(x) "Detroit" %in% x, top10_cities)
 ```
-Position() and Find()
 
+
+### Reshaping a dataset
+
+There are two formats that a dataset can be presented: long and wide. The functions <tt>melt</tt> and <tt>dcast</tt> can modify from one format to another.
+
+```{r}
+library(reshape2)
+data_crime_city = data.frame(data_crime, City = rownames(data_crime))
+head(data_crime_city)
+long_data_crime = melt(data_crime_city, id.vars = "City")
+head(long_data_crime)
+wide_data_crime = dcast(long_data_crime, City ~ variable)
+head(wide_data_crime)
+```
+
+### Functionals with data frames
+The library <tt>plyr</tt> contains functions to perform functional programming. In particular, it is useful to manipulate data frames.
+```{r, eval=FALSE}
+library(plyr)
+summarize(data_crime, mean_murder = mean(Murder), mean_robbery = mean(Robbery))
+transform(data_crime, murder_square = Murder^2, mean_robbery = mean(Robbery))
+```
+The function <tt>ddply</tt> is similar to <tt>apply</tt>, but it takes as input and output a data.frame.
+```{r, eval=FALSE}
+ddply(long_data_crime, c("City"), function(df) mean(df$value))
+ddply(long_data_crime, c("City"), summarize, mean_city =mean(value), sd_city = sd(value))
+ddply(long_data_crime, c("City"), summarize, mean_city =mean(value), sd_city = sd(value))
+```
 
 ## Visualization using ggplot
-
-
+The base plotting functions in R are useful to produce simple outputs, but as the level of difficulty in the plot progresses, they can become difficult to modify. The library <tt>ggplot2</tt> offers a plotting system with substantial capabilities and nicer graphics than the base plotting functions.
 ```{r}
 plot(x = data_crime$Robbery, y = data_crime$Assault)
 ```
 
-Quick plot
+The function <tt>qplot</tt> (quick plot) is an equivalent to <tt>plot</tt>. Useful to create simple plots, but it has a limited functionality.
 ```{r}
 library(ggplot2)
+qplot(x=Robbery, data = data_crime, geom="histogram")
 qplot(x = Robbery, y = Assault, data = data_crime)
 ```
 
-ggplot standard functions
+The <tt>ggplot()</tt> is the standard way to create plots. 
 ```{r}
 crime_plot = ggplot(data_crime, aes(x = Robbery, y = Assault))
 crime_plot + geom_point()
@@ -112,15 +139,15 @@ crime_plot + geom_point(aes(color = Murder)) +
 crime_plot + geom_text(aes(label=rownames(data_crime)), check_overlap = TRUE)
 ```
 
-3d plot
+Sometimes it is useful to create 3D plots to visualize multivariate data. The library <tt>plotly</tt>  can do so.
 ```{r,warning=FALSE}
 #install.packages("plotly")
 library(plotly)
-p <- plot_ly(data_crime, x = ~Robbery, y = ~Assault, z = ~Murder)
+p = plot_ly(data_crime, x = ~Robbery, y = ~Assault, z = ~Murder)
 p
 ```
 
-pairs
+Pairs plots are useful to visualize multiple variables at the same time. The base function is <tt>pairs</tt>, but here is an example with ggplot.
 ```{r}
 library(GGally)
 crime_pairs = ggpairs(data_crime,axisLabels = "none",
@@ -132,6 +159,17 @@ crime_pairs
 ```
 
 
+
+Ggplot easily allows to visualize multiple time series in the same plot. For this, it is necessary to convert the data first to a long format using <tt>melt</tt>.
+```{r}
+trigon_data = data.frame(lapply(c(sin, cos), function(f) f(seq(0, 2*pi,0.05))), x= seq(0, 2*pi,0.05))
+colnames(trigon_data) = c("sin", "cos", "x")
+trigon_data_long = melt(trigon_data, id.vars = "x")
+ggplot(trigon_data_long, aes(x=x, y=value,colour=variable, group = variable)) + geom_line()
+```
+
+
+Finally, R has functions that allow to save a plot to a file. Different extensions are allowed, here is an example with <tt>pdf</tt>.
 ```{r}
 pdf("crime_ggpairs.pdf")
 crime_pairs
@@ -150,7 +188,7 @@ Work in pairs to solve the next questions. In all problems, try to use functiona
 
 4. Repeat 2 and 3, but instead of varying the number of observations, change the number of variables from 100 to 2000.
 
-```{r}
+```{r, echo=FALSE}
 sample = matrix(rnorm(1000*10), ncol = 10)
 p = 20
 n = 100
@@ -163,9 +201,9 @@ qplot(y=eigenvalues, xlab="Index", ylab="Eigenvalues")
 
 
 
-```{r}
+```{r, echo=FALSE}
 generate_data = function(n, p) {
-  X <- sweep(matrix(rnorm(n*p),ncol = p), 2, c(3,2,rep(1,p-2)), "*")
+  X = sweep(matrix(rnorm(n*p),ncol = p), 2, c(3,2,rep(1,p-2)), "*")
 }
 
 compute_svd = function(X) {
@@ -183,7 +221,7 @@ qplot(y = svd_times, main = "SVD", xlab = "Observations", ylab = "Running time")
 ```
 
 
-```{r}
+```{r,cache=TRUE, echo=FALSE}
 compute_eig = function(X) {
   start = proc.time()
   eigenvalues = eigen(cov(X))$values
@@ -194,7 +232,7 @@ eig_times = sapply(data_obs, compute_eig)
 qplot(y = eig_times, main = "Eig", xlab = "Observations", ylab = "Running time")
 ```
 
-```{r}
+```{r,cache=TRUE,echo=FALSE}
 data_var = lapply(seq(100, 2000, 100), generate_data, n = 100)
 svd_times = sapply(data_var, compute_svd) 
 qplot(y = svd_times, main = "SVD", xlab = "Variables", ylab = "Running time")

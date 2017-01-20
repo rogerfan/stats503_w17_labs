@@ -1,0 +1,204 @@
+---
+title: "Lab 3 - Stats 503"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+# Read in data
+
+```{r, message=F, warning=F}
+data = read.csv('./data/cars.csv')
+head(data)
+```
+
+
+## Calculate PCA
+
+```{r, message=F, warning=F}
+X = data[,-1]
+pca = princomp(X, cor=FALSE)
+summary(pca)
+loadings(pca)
+
+
+pca$sdev^2
+
+covX = cov(X)
+eig = eigen(covX)
+eigen(covX)$values
+
+X_demean = scale(X, center=TRUE, scale=FALSE)
+svd(X_demean)$d^2/(nrow(X)-1)
+```
+
+
+## Scree Plot
+
+```{r, message=F, warning=F}
+require(ggplot2)
+
+plot(pca)
+
+scree = qplot(1:length(pca$sdev), pca$sdev, geom='line',
+              ylab='Component Standard Deviation', xlab='Component')
+scree
+```
+
+
+## Biplot
+
+```{r, message=F, warning=F}
+# library(devtools)
+# install_github("vqv/ggbiplot")
+
+require(ggbiplot)
+
+ggbiplot(pca)
+```
+
+
+## PCA as Projection
+
+```{r, message=F, warning=F}
+require(plotly)
+
+data_res = data[,c('mpg', 'hp', 'wt')]
+
+plot_data = plot_ly(data_res, x = ~mpg, y = ~hp, z = ~wt)
+plot_data
+
+X_res = data[,c('mpg', 'hp', 'wt')]
+pca_res = princomp(X_res, cor=FALSE)
+
+W = loadings(pca_res)[,1:2]
+
+proj = pca_res$scores[,1:2] %*% t(W)
+proj = sweep(proj, 2, pca_res$center, "+")
+
+proj = as.data.frame(proj)
+proj$lab = 'Projected'
+X_res$lab = 'Original'
+data_for_plotting = rbind(X_res, proj)
+
+plot_pca1 = plot_ly(data_for_plotting, x=~mpg, y=~hp, z=~wt, color=~lab)
+plot_pca1
+```
+
+
+```{r, message=F, warning=F}
+require(scatterplot3d)
+
+data_for_plotting$col = ifelse(data_for_plotting$lab == 'Original', 'blue', 'red')
+
+scatterplot3d(
+    data_for_plotting[,1:3], color=data_for_plotting$col,
+    angle=160, scale.y=0.6,
+    pch=19,type='h', lty.hplot=2)
+```
+
+
+## Bootstrap
+
+```{r, message=F, warning=F}
+set.seed(2346234)
+num_boot = 1000
+
+ols = lm(mpg ~ disp + hp + drat + wt + qsec, data=data)
+coef(ols)['wt']
+
+bootstrap_iter = function(i) {
+    data_resample = data[sample(1:nrow(data), nrow(data), replace=TRUE),]
+    ols_resample = lm(mpg ~ disp + hp + drat + wt + qsec, data=data_resample)
+    return(coef(ols_resample)['wt'])
+}
+
+bootstrap_res = data.frame(coef=sapply(1:num_boot, bootstrap_iter))
+
+plot_bootstrap = ggplot(bootstrap_res, aes(x=coef)) +
+    geom_histogram() + geom_vline(xintercept=coef(ols)['wt'], color='magenta')
+plot_bootstrap
+```
+
+
+## Exercises
+
+1. Generate $X$ as 200 observations from a $10$-dimensional multivariate
+normal distribution with a mean $\mu = (1, 2, \dots, p)$ and an AR1(0.6) covariance
+matrix, i.e. $\Sigma_{ij} = 0.6^{\lvert i - j \rvert}$.
+2. Calculate the largest singular value of $X$.
+3. Use the bootstrap to estimate the sampling distribution of the largest
+singular value of $X$.
+4. Repeat steps 1-2 many times to directly simulate the sampling distribution.
+5. Plot the simulated and bootstrapped distributions on the same plot and
+compare.
+
+```{r, message=F, warning=F}
+# Part 1
+
+set.seed(56256)
+
+rho = 0.6
+n = 100
+p = 10
+
+Sigma = diag(p)
+Sigma = rho^abs(row(Sigma)-col(Sigma))
+
+X = matrix(rnorm(n*p), ncol=p) %*% chol(Sigma)
+X = sweep(X, 2, 1:p, "+")
+```
+
+```{r, message=F, warning=F}
+# Part 2
+
+svd(X)$d[1]
+```
+
+```{r, message=F, warning=F}
+# Part 3
+
+num_boot = 500
+
+bootstrap_iter = function(i) {
+    X_resample = X[sample(1:n, n, replace=TRUE),]
+    return(svd(X_resample)$d[1])
+}
+res_boot = data.frame(d=sapply(1:num_boot, bootstrap_iter))
+```
+
+```{r, message=F, warning=F}
+# Part 4
+
+res_sim = data.frame(d=rep(NA, num_boot))
+for (i in 1:num_boot) {
+    X_sim = matrix(rnorm(n*p), ncol=p) %*% chol(Sigma)
+    X_sim = sweep(X_sim, 2, 1:p, "+")
+    res_sim$d[i] = svd(X_sim)$d[1]
+}
+```
+
+```{r, message=F, warning=F}
+# Part 5
+
+res_boot$labels = 'Bootstrap'
+res_sim$labels  = 'Simulated'
+res_all = rbind(res_boot, res_sim)
+
+values = data.frame(x=c(eigen(Sigma)$values[1], svd(X)))
+
+plot_dists = ggplot(res_all, aes(x=d, fill=labels)) +
+    geom_histogram(alpha=0.5, aes(y=..density..), position='identity') +
+    ylab('Density') + xlab('Largest Singular Value') +
+    theme_bw() +
+    theme(legend.position=c(0.99,0.99), legend.justification=c(1,1),
+          legend.title=element_blank(),
+          legend.background=element_rect(color="lightgrey"))
+
+# pdf('./sampling_dists.pdf', height=6, width=7.5)
+# print(plot_dists)
+# dev.off()
+plot_dists
+```
+
+

@@ -1,0 +1,295 @@
+---
+title: "Lab 5 - Stats 503"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+
+Any time you have issues, your first reference should be the ggplot2
+help page at [http://docs.ggplot2.org/current/](http://docs.ggplot2.org/current/).
+
+
+Building blocks of a ggplot graph:
+
+* Data
+* Aesthetic mapping
+* Geometric objects
+* Scales and legends
+* Faceting and visuals
+
+```{r, message=F, warning=F}
+#install.packages('ISLR')
+require(ISLR)
+require(ggplot2)
+require(reshape2)
+
+data(Carseats)
+head(Carseats)
+
+data(EuStockMarkets)
+stock_data = as.data.frame(EuStockMarkets)
+stock_data$time = as.numeric(time(EuStockMarkets))
+head(stock_data)
+```
+
+
+## Aesthetic mapping
+
+How do we map variables to features of the plot. Common examples:
+
+* Position (x, y coordinates)
+* Color
+* Fill ('inside' coloring)
+* Shape
+* Linetype
+* Size
+
+```{r, message=F, warning=F}
+plot1 = ggplot(data=Carseats, aes(x=Price, y=Sales, color=ShelveLoc, shape=Urban)) +
+    geom_point()
+plot1
+
+ggplot(data=Carseats, aes(x=Price, y=Sales, color=Advertising)) +
+    geom_point() +
+    xlab('Prices ($)') + ylab('Sales (thousands)') + ggtitle('Car Seat Sales')
+```
+
+
+Note that aesthetic mappings are inherited from the default aesthetic but can
+also be applied for specific pieces.
+
+```{r, message=F, warning=F}
+ggplot(data=Carseats, aes(x=Price, y=Sales)) +
+    geom_point(aes(color=US))
+```
+
+
+Similarly, data can also be applied
+for a specific object, but otherwise is inherited from the top-level.
+
+```{r, message=F, warning=F}
+ggplot(data=Carseats, aes(x=Price, y=Sales)) +
+    geom_point(data=subset(Carseats, US == 'Yes'), aes(color=Urban)) +
+    geom_point(data=subset(Carseats, US == 'No'))
+```
+
+
+## Geometric objects
+
+What marks do we want on the plot. Each `geom_` object tends to have
+certain `aes` arguments that it requires or can use. Examples:
+
+* `geom_point` for scatter plots
+* `geom_line` for line plots
+* `geom_histogram`
+* `geom_text`
+
+When using multiple geometries, you can direcly modify their attributes
+or add them to the aesthetic (so they get included in legends).
+
+```{r, message=F, warning=F}
+Carseats_addpred = Carseats
+Carseats_addpred$Sales_pred = predict(lm(Sales ~ Price, data=Carseats))
+
+ggplot(data=Carseats_addpred, aes(x=Price)) +
+    geom_point(aes(y=Sales)) +
+    geom_line(aes(y=Sales_pred), color='Magenta')
+
+ggplot(data=Carseats_addpred, aes(x=Price)) +
+    geom_point(aes(y=Sales, color='Data')) +
+    geom_line(aes(y=Sales_pred, color='Predicted'))
+```
+
+
+Some miscellaneous other `geom_` examples.
+
+```{r, message=F, warning=F}
+ggplot(data=stock_data[1:100,], aes(x=time, y=DAX)) +
+    geom_point() +
+    geom_smooth(span=0.3)
+
+ggplot(data=Carseats, aes(x=Price, y=Sales)) +
+    geom_point() +
+    geom_smooth(method='lm', se=FALSE)
+
+ggplot(data=Carseats, aes(x=Sales, color=ShelveLoc, fill=ShelveLoc)) +
+    geom_density(alpha=0.3)
+
+ggplot(data=Carseats, aes(x=Price, y=Sales)) +
+    geom_point() +
+    geom_abline(intercept=10, slope=-0.04) +
+    geom_vline(xintercept=115, linetype='dashed')
+
+require(mvtnorm)
+dat = Carseats[,c('Price', 'Sales')]
+xgrid = expand.grid(
+    Price=seq(24, 191, length.out=50),
+    Sales=seq(0, 16.3, length.out=50))
+xgrid$p = dmvnorm(xgrid, mean=colMeans(dat), sigma=cov(dat))
+
+ggplot(Carseats, aes(x=Price, y=Sales)) +
+    geom_point() +
+    geom_contour(aes(z=p), data=xgrid, breaks=3e-4)
+
+ggplot(Carseats, aes(x=Price, y=Sales)) +
+    geom_point() +
+    stat_ellipse()
+```
+
+
+## Aside on melt
+
+You'll very often find that you need data in long format to plot it using
+ggplot, which means you will want to use `melt` from the reshape2 package.
+To change data in the other direction, from long to wide, you can use `dcast`.
+
+```{r, message=F, warning=F}
+head(stock_data)
+
+stock_data_melted = melt(stock_data, id.vars='time')
+head(stock_data_melted)
+
+ggplot(data=stock_data_melted, aes(x=time, y=value, color=variable)) +
+    geom_line()
+```
+
+
+## Scales and Legends
+
+```{r, message=F, warning=F}
+plot2 = ggplot(data=Carseats, aes(x=Price, y=Sales, color=Advertising, shape=ShelveLoc)) +
+    geom_point()
+
+plot2 + scale_shape_discrete(name='Shelve Location',
+                             breaks=c('Good', 'Medium', 'Bad'),
+                             labels=c('G', 'M', 'B'))
+
+plot2 + scale_color_continuous(name='Advertising Level',
+                               breaks=seq(0, 30, 5),
+                               low='grey', high='red')
+
+require(RColorBrewer)
+plot2 + scale_color_distiller(palette='YlOrRd', direction=1)
+
+plot2 + scale_x_continuous(limits=c(0, 300))
+
+plot2 + scale_y_log10()
+
+plot2 + scale_y_reverse()
+
+plot2 + coord_fixed(ratio=5)
+```
+
+
+## Faceting and visuals
+
+```{r, message=F, warning=F}
+plot2 + facet_grid(. ~ Urban)
+
+plot2 + facet_grid(US ~ Urban, labeller=label_both)
+
+ggplot(data=stock_data_melted, aes(x=time, y=value)) +
+    geom_line() +
+    facet_wrap(~variable)
+
+```
+
+## Themes
+
+```{r, message=F, warning=F}
+plot2 + theme_bw()
+
+plot2 + theme_minimal()
+
+plot2 + theme(legend.position=c(0.98,0.98), legend.justification=c(1,1),
+              legend.box = "horizontal",
+              legend.background=element_rect(color="lightgrey"))
+```
+
+
+## Exercises
+
+1. Plot the centers of each US state by their latitude and longitude. Label the
+states with their two-letter abbreviation. Size the dots according to each state's
+population. Color the states according to their regional division.
+Note that you can load this data using `data(state)`, after which state data will be
+located in:
+
+    * `state.center`
+    * `state.abb`
+    * `as.data.frame(state.x77)$Population`
+    * `state.division`
+
+```{r, message=F, warning=F}
+data(state)
+data_state = data.frame(
+    x=state.center$x, y=state.center$y, abb=state.abb,
+    Population=as.data.frame(state.x77)$Population, Division=state.division)
+
+ggplot(data_state, aes(x=x, y=y)) +
+    geom_point(aes(size=Population, fill=Division),
+               pch=21, color='black', stroke=0.2, alpha=0.7) +
+    geom_text(aes(label=abb), size=2, hjust=0.5, vjust=-0.5) +
+    scale_size_area() +
+    scale_y_continuous(limits=c(15, 60)) +
+    coord_fixed(ratio=1)
+```
+
+
+2. `dowjones.csv` contains weekly percentage changes for a set of 30 stocks.
+Attempt to replicate the following figure, which visualizes the correlation
+matrix of the stocks.
+
+    Hints:
+
+    * You might want to look up `geom_tile`.
+    * Try using `melt` on the correlation matrix.
+    * If you want a "prettier" ordering of variables, you can use
+    `hclust(distance_matrix)$order` to extract one based on hierarchical clustering,
+    as long as you can get an appropriate distance matrix. You might need to use `as.dist`
+    to convert a matrix to a "distance matrix" form.
+
+```{r, message=F, warning=F}
+# Read in data
+data = read.csv('./data/dowjones.csv')
+data_wide = dcast(data, date ~ symb)
+corr_mat = cor(data_wide[,-1])
+
+# Use hierarchical clustering to order
+dist_temp = as.dist(1-corr_mat)
+hc = hclust(dist_temp)
+corr_mat = corr_mat[hc$order, hc$order]
+
+# Remove upper triangle
+corr_mat_lower = corr_mat
+corr_mat_lower[upper.tri(corr_mat_lower)] = NA
+
+# Melt correlation matrix and make sure order of factor variables is correct
+corr_mat_melted = melt(corr_mat_lower)
+corr_mat_melted$Var1 = factor(corr_mat_melted$Var1, levels=colnames(corr_mat))
+corr_mat_melted$Var2 = factor(corr_mat_melted$Var2, levels=colnames(corr_mat))
+
+# Plot
+corr_plot = ggplot(corr_mat_melted, aes(x=Var1, y=Var2, fill=value)) +
+    geom_tile(color='white') +
+    scale_fill_distiller(limits=c(-1, 1), palette='RdBu', na.value='white',
+                         name='Correlation') +
+    ggtitle('Correlations') +
+    coord_fixed(ratio=1) +
+    theme_minimal() +
+    scale_y_discrete(position="right") +
+    theme(axis.text.x=element_text(angle=45, vjust=1, hjust=1),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank(),
+          panel.grid.major=element_blank(),
+          legend.position=c(0.1,0.9),
+          legend.justification=c(0,1))
+corr_plot
+```
+
+
+
+
+
+

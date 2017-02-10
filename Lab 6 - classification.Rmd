@@ -1,0 +1,156 @@
+---
+title: "Lab 6 - Stats 503"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+```{r}
+data(iris)
+head(iris)
+```
+
+```{r,cache=T}
+library(ggplot2)
+library(GGally)
+ggpairs(iris, columns=1:4,
+        mapping=aes(color=Species),
+        diag="blank",
+        axisLabels = "internal",
+        upper=list(continuous='points'))
+
+ggparcoord(iris, scale="globalminmax", columns=c(3,4,1,2),
+           groupColumn=5)
+```
+
+
+## LDA
+First, divide the data into train and test.
+```{r}
+classes = lapply(levels(iris$Species), function(x) which(iris$Species==x))
+train = lapply(classes, function(class) sample(class, 0.7*length(class), replace = F))
+train = unlist(train)
+test = (1:nrow(iris))[-train]
+iristrain = iris[train,]
+iristest = iris[test,]
+```
+
+```{r}
+library(MASS)
+irislda = lda(data=iristrain,Species~.)
+```
+
+```{r}
+irispred = predict(irislda, iristest)
+table(iristest$Species, irispred$class)
+```
+
+
+## QDA
+
+```{r}
+irisqda <- qda(data=iristrain,Species~.)
+```
+
+```{r}
+irispred = predict(irisqda, iristest)
+table(iristest$Species, irispred$class)
+```
+
+
+## Diagonal LDA (Naive Bayes)
+
+```{r}
+library(sparsediscrim)
+irisdlda <- dlda(data=iristrain,Species~.)
+```
+
+```{r}
+irispred = predict(irisdlda, iristest[,-5])
+table(iristest$Species, irispred$class)
+```
+
+
+## Boundary plot
+```{r}
+boundary_plot <- function(df, classifier, predict_function,   resolution = 500) {
+  colnames(df) = c("Var1", "Var2", "Class")
+  class_train = classifier(x = df[,1:2], y = df[,3])
+  v1 = seq(min(df[,1]), max(df[,1]), length=resolution)
+  v2 = seq(min(df[,2]), max(df[,2]), length=resolution)
+  Grid = expand.grid(Var1 = v1, Var2 = v2)
+  Grid$class = predict_function(class_train, Grid)
+  ggplot(data=df, aes(x=Var1, y=Var2, color=Class)) +
+    geom_contour(data=Grid, aes(z=as.numeric(class)),
+                 color="black",size=0.5)+
+    geom_point(size=2,aes(color=Class, shape=Class))
+}
+
+```
+
+
+```{r,cache=T}
+
+lda_wrapper = function(x, y) lda(x = x, grouping = y)
+predict_wrapper = function(classifier, data) predict(classifier, data)$class
+bp_lda = boundary_plot(iris[3:5], lda_wrapper, predict_wrapper) +
+  ggtitle('Iris LDA') + theme_dark()
+
+qda_wrapper = function(x, y) qda(x = x, grouping = y)
+predict_wrapper = function(classifier, data) predict(classifier, data)$class
+bp_qda = boundary_plot(iris[3:5], qda_wrapper, predict_wrapper) +
+  ggtitle('Iris QDA') + theme_dark()
+
+dlda_wrapper = function(x, y) dlda(x = x, y = y)
+predict_wrapper = function(classifier, data) predict(classifier, data[,-3])$class
+bp_dlda = boundary_plot(iris[3:5], dlda_wrapper, predict_wrapper) +
+  ggtitle('Iris DLDA') + theme_dark()
+
+require(gridExtra)
+grid.arrange(bp_lda, bp_qda, bp_dlda, ncol=2)
+```
+
+
+
+
+## Cross-validation
+
+```{r}
+#install.packages('parallel')
+library(parallel)
+detectCores()
+cl <- makeCluster(3)
+
+```
+
+```{r}
+#library(sparsediscrim)
+folds = cv_partition(iris$Species, num_folds = 5)
+```
+
+```{r}
+train_test_lda <- function(fold) {
+   irislda = lda(data= iris[fold$training,], Species~.)
+   irispred = predict(irislda, iris[fold$test,])
+   return(sum(irispred$class != iris[fold$test,]$Species) / length(fold$test))
+}
+
+
+clusterEvalQ(cl, library(MASS))
+iris_errors = parLapply(cl, folds, train_test_lda)
+mean(unlist(iris_errors))
+stopCluster(cl)
+```
+
+## Exercises
+
+1. Simulate data from the following model.
+ + There are two classes $(Y=1,2)$ with equal priors.
+ + Given $Y=1$, $X$ is a random vector of size 3 with Poisson($\lambda_1 =1$) i.i.d. entries.
+ + Given $Y=2$, $X$ is a random vector of size 3 with Poisson($\lambda_2 = 2$) i.i.d. entries.
+ + Generate 200 observations for the training set and 200 for the test set.
+2. Given the model in the previous question, obtain the Bayes classification rule.
+3. Implement the Bayes classification rule in R and calculate the test error. 
+  + First, assume that the parameters $\lambda_1$ and $\lambda_2$ are known (no need to use training data). Calculate the test error.
+  + Use the training data to estimate $\lambda_1$ and $\lambda_2$. Calculate the test error.
+  + Compare your results with LDA, QDA and DLDA.

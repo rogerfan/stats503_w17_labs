@@ -1,0 +1,188 @@
+---
+title: "Lab 7 - Stats 503"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+
+```{r, message=F, warning=F}
+require(ggplot2)
+require(stats)     # glm
+require(MASS)      # lda
+require(nnet)      # multinom
+
+data = read.csv('./data/heightWeightData.txt', header=FALSE, sep='')
+names(data) = c('sex', 'height', 'weight')
+data$sex = as.factor(ifelse(data$sex == 1, 'male', 'female'))
+
+data(iris)
+iris = iris[,c('Sepal.Length', 'Petal.Length', 'Species')]
+iris2 = iris[iris$Species %in% c('versicolor', 'virginica'),]
+```
+
+
+## Logistic Regression
+
+```{r, message=F, warning=F}
+ggplot(data, aes(x=height, y=weight, color=sex)) + geom_point()
+
+
+set.seed(7363)
+
+n = nrow(data)
+train2 = sample(1:n, n/2)
+
+data_train = data[train2,]
+data_test = data[-train2,]
+
+logit = glm(sex ~ ., data=data_train, family='binomial')
+
+head(predict(logit, data_test))
+head(predict(logit, data_test, type='response'))
+
+pred_logit = ifelse(predict(logit, data_test, type='response') > 0.5, 'male', 'female')
+data_test$pred_logit = factor(pred_logit, levels=levels(data_test$sex))
+mean(data_test$sex != data_test$pred_logit)
+```
+
+
+## Comparison to LDA
+
+```{r, message=F, warning=F}
+mod_lda = lda(sex ~ ., data=data_train)
+
+data_test$pred_lda = predict(mod_lda, data_test)$class
+mean(data_test$sex != data_test$pred_lda)
+
+grid = expand.grid(height=seq(55, 79, length=500), weight=seq(95, 280, length=500))
+grid$logit = as.numeric(predict(logit, grid, type='response') > 0.5)
+grid$lda = as.numeric(predict(mod_lda, grid)$class)
+
+ggplot(data, aes(x=height, y=weight)) +
+    geom_point(aes(color=sex)) +
+    geom_contour(data=grid, aes(z=logit, color='Logit')) +
+    geom_contour(data=grid, aes(z=lda, color='LDA')) +
+    scale_color_discrete(name='Boundary', breaks=c('LDA', 'Logit'))
+
+```
+
+
+## Interpreting Coefficients
+
+```{r, message=F, warning=F}
+summary(logit)
+
+exp(coef(logit))   ## Interpretation as multiple of log odds ratio
+
+
+data_norm = data_train
+data_norm[-1] = scale(data_norm[-1])
+logit_norm = glm(sex ~ ., data=data_norm, family='binomial')
+
+exp(coef(logit_norm))
+```
+
+
+## Multinomial Logistic Regression
+
+We will show an example using `nnet`. Note that the packages `mlogit` and
+`mnlogit` can also be used. The `glmnet` package can also be used for both
+logistic and multinomial logistic regression and can also estimate
+penalized versions and do cross-validation. See
+[this vignette](https://web.stanford.edu/~hastie/glmnet/glmnet_alpha.html#log)
+for details.
+
+```{r, message=F, warning=F}
+set.seed(242626)
+
+n = nrow(iris)
+train = sample(1:n, n/2)
+iris_train = iris[train,]
+iris_test = iris[-train,]
+
+mlogit = multinom(Species ~ ., data=iris_train)
+
+head(predict(mlogit, iris_test, type='probs'))
+iris_test$pred = predict(mlogit, iris_test, type='class')
+
+mean(iris_test$Species != iris_test$pred)
+```
+
+
+## Kernel Density Estimation
+
+See [here](https://en.wikipedia.org/wiki/Kernel_(statistics)#Kernel_functions_in_common_use)
+for some common kernels.
+
+```{r, message=F, warning=F}
+data(faithful)
+
+dens = density(faithful$eruptions, kernel='gaussian')
+plot(dens)
+
+plot(density(faithful$eruptions, adjust=0.2, kernel='gaussian'))
+plot(density(faithful$eruptions, kernel='epanechnikov'))
+
+ggplot(faithful, aes(x=eruptions, y=waiting)) +
+    geom_point() +
+    geom_density_2d()
+```
+
+## Problems
+
+1. Simulate 2000 data points from a uniform distribution on the $[0,1] \times [0,1]$
+rectangle. Define points to be from class 1 if $y < -1 + 2x$ and class 0 otherwise.
+Split the data into training and test dataset.
+
+2. Estimate a logistic regression and calculate the test error.
+
+3. Estimate an LDA model and calculate the test error.
+
+4. Plot the estimated boundaries for the logistic and LDA models as well as the
+true boundary on the same plot.
+
+5. Compare LDA and logistic regression. Which performs better? Why?
+
+```{r, message=F, warning=F, include=F}
+# Simulate data
+set.seed(12451)
+n = 2000
+
+dat = data.frame(x=runif(n), y=runif(n))
+dat$class = as.numeric(dat$y < (-1 + 2*dat$x))
+dat$class_fac =as.factor(dat$class)
+
+dat_train = dat[1:(n/2),]
+dat_test = dat[(n/2+1):n,]
+
+ggplot(dat, aes(x=x, y=y)) +
+    geom_point(aes(color=class_fac)) +
+    geom_abline(intercept=-1, slope=2)
+
+# Estimate models
+mod_logit = glm(class ~ x+y, data=dat_train, family='binomial')
+mod_lda = lda(class ~ x+y, data=dat_train)
+
+# Calculate test errors
+pred_logit = as.numeric(predict(mod_logit, dat_test, type='response') > 0.5)
+pred_lda = predict(mod_lda, dat_test)$class
+
+mean(pred_logit == dat_test$class)
+mean(pred_lda == dat_test$class)
+
+# Plot boundaries
+grid = expand.grid(x=seq(0.3, 1, length=500), y=seq(0, 1, length=500))
+grid$class = as.numeric(grid$y < (-1 + 2*grid$x))
+grid$logit = as.numeric(predict(mod_logit, grid, type='response') > 0.5)
+grid$lda = as.numeric(predict(mod_lda, grid)$class)
+
+ggplot(grid, aes(x=x, y=y)) +
+    geom_contour(aes(z=class, color='True')) +
+    geom_contour(aes(z=logit, color='Logit')) +
+    geom_contour(aes(z=lda, color='LDA')) +
+    xlim(0, 1) + ylim(0, 1)
+```
+
+
+

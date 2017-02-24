@@ -170,8 +170,8 @@ tune.svm(mpg~., data = autotrain, cost = costs)
 ## Exercises
 
 1. Generate data in the following way:
- + $X = (X_1, X_2$ is distributed uniform on the square $[-2,2]\times[-2,2]$.
- + The class $Y$ is 1 if $X^2+Y^2\leq 1$, and -1 otherwise.
+ + $X = (X_1, X_2)$ is distributed uniform on the square $[-2,2]\times[-2,2]$.
+ + The class $Y$ is 1 if $X^2+Y^2\leq 1$, and 0 otherwise.
 2. Plot your data.
 3. Fit the following classifiers and compare the results.
  + SVM (which kernel is apprpriate?)

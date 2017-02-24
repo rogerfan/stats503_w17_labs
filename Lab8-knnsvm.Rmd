@@ -1,0 +1,179 @@
+---
+title: "Lab 6 - Stats 503"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+
+```{r}
+#install.packages("ISLR")
+library(ISLR)
+data(Auto)
+colnames(Auto)
+Y =  factor(1*(Auto$mpg > median(Auto$mpg)))
+Auto$mpg = Y
+
+set.seed(2017)
+classes = lapply(levels(Y), function(x) which(Auto$mpg==x))
+train = lapply(classes, function(class) sample(class, 0.7*length(class), replace = F))
+train = unlist(train)
+test = (1:nrow(Auto))[-train]
+autotrain = Auto[train,1:7]
+autotest = Auto[test,1:7]
+```
+
+## K-nearest neighbors
+
+
+
+```{r}
+require(class)
+autoknn = knn(train = autotrain[,2:7], cl = autotrain$mpg, test = autotest[,2:7], k = 5)
+summary(autoknn)
+table(autotest$mpg, autoknn)
+```
+
+### Boundary plot
+A boundary plot can be constructed in the same way as in Lab 6. Here is a dynamic visualization using Shiny with the iris data https://jesusdaniel.shinyapps.io/lab8-shinyknn/
+
+### Cross-validation to select the number of neighbors
+
+```{r}
+library(sparsediscrim)
+library(ggplot2)
+folds = cv_partition(autotrain$mpg, num_folds = 5)
+
+train_cv_error = function(K) {
+  #Train error
+  auto.knn = knn(train = autotrain[,2:7], test = autotrain[,2:7], 
+                  cl = autotrain$mpg, k = K)
+  train_error = sum(auto.knn != autotrain$mpg) / nrow(autotrain)
+  #CV error
+  auto.cverr = sapply(folds, function(fold) {
+    sum(autotrain$mpg[fold$test] != knn(train = autotrain[fold$training,2:7], cl = autotrain[fold$training,1], test = autotrain[fold$test, 2:7], k=K)) / length(fold$test)
+  })
+  cv_error = mean(auto.cverr)
+  #Test error
+  auto.knn.test = knn(train = autotrain[,2:7], test = autotest[,2:7], 
+                  cl = autotrain$mpg, k = K)
+  test_error = sum(auto.knn.test != autotest$mpg) / nrow(autotest)
+  return(c(train_error, cv_error, test_error))
+}
+
+auto_k_errors = sapply(1:30, function(k) train_cv_error(k))
+df_errs = data.frame(t(auto_k_errors), 1:30)
+colnames(df_errs) = c('Train', 'CV', 'Test', 'K')
+
+
+library(reshape2)
+dataL <- melt(df_errs, id="K")
+ggplot(dataL, aes_string(x="K", y="value", colour="variable",
+group="variable", linetype="variable", shape="variable")) +
+geom_line(size=1) + labs(x = "Number of nearest neighbors",
+y = "Classification error",
+colour="",group="",
+linetype="",shape="") +
+geom_point(size=4)
+```
+
+The package e1071 has a function that automatically tunes classifiers.
+```{r}
+library(e1071)
+knntuning = tune.knn(x= autotrain[,2:7], y = autotrain$mpg, k = 1:30)
+summary(knntuning)
+
+```
+
+
+## Support Vector Machines
+
+```{r}
+library(e1071)
+auto.svm <- svm(mpg~cylinders + horsepower, data=Auto,
+                kernel="linear", cost=1)
+
+plot(auto.svm, Auto[,c(1,2,4)])
+
+auto.svm <- svm(mpg~., data=autotrain,
+                kernel="linear", cost=1)
+summary(auto.svm)
+
+table(autotest$mpg, predict(auto.svm, autotest))
+
+```
+
+### Kernels
+```{r}
+auto.svmradial = svm(mpg~., data=autotrain,
+                kernel="radial", cost=1)
+table(autotest$mpg, predict(auto.svmradial, autotest))
+
+auto.svmpoly = svm(mpg~., data=autotrain,
+                kernel="polynomial", cost=1, degree = 2)
+table(autotest$mpg, predict(auto.svmpoly, autotest))
+
+auto.svmsig = svm(mpg~., data=autotrain,
+                kernel="sigmoid", cost=1)
+table(autotest$mpg, predict(auto.svmsig, autotest))
+
+```
+
+### Boundary plot
+
+https://jesusdaniel.shinyapps.io/lab8-shinysvm/
+
+
+### Cost parameter
+The cost plays a role of tuning parameter controlling the bias-variance trade-off and can be chosen by cross-validation.
+```{r}
+set.seed(1071)
+folds = cv_partition(autotrain$mpg, num_folds = 5)
+
+train_cv_error_svm = function(costC) {
+  #Train
+  auto.svm = svm(mpg~., data=autotrain,
+                kernel="radial", cost=costC)
+  train_error = sum(auto.svm$fitted != autotrain$mpg) / nrow(autotrain)
+  #Test
+  test_error = sum(predict(auto.svm, autotest) != autotest$mpg) / nrow(autotest)
+  #CV error
+  autoe.cverr = sapply(folds, function(fold) {
+    svmcv = svm(mpg~.,data = autotrain, kernel="radial", cost=costC, subset = fold$training)
+    svmpred = predict(svmcv, autotrain[fold$test,])
+    return(sum(svmpred != autotrain$mpg[fold$test]) / length(fold$test))
+  })
+  cv_error = mean(autoe.cverr)
+  return(c(train_error, cv_error, test_error))
+}
+
+costs = exp(-5:8)
+auto_cost_errors = sapply(costs, function(cost) train_cv_error_svm(cost))
+df_errs = data.frame(t(auto_cost_errors), costs)
+colnames(df_errs) = c('Train', 'CV', 'Test', 'Logcost')
+
+
+dataL <- melt(df_errs, id="Logcost")
+ggplot(dataL, aes_string(x="Logcost", y="value", colour="variable",
+group="variable", linetype="variable", shape="variable")) +
+geom_line(size=1) + labs(x = "Cost",
+y = "Classification error",
+colour="",group="",
+linetype="",shape="") + scale_x_log10()
+```
+
+We can use the function tune.svm to select the best tuning parameter.
+```{r}
+tune.svm(mpg~., data = autotrain, cost = costs)
+```
+
+## Exercises
+
+1. Generate data in the following way:
+ + $X = (X_1, X_2$ is distributed uniform on the square $[-2,2]\times[-2,2]$.
+ + The class $Y$ is 1 if $X^2+Y^2\leq 1$, and -1 otherwise.
+2. Plot your data.
+3. Fit the following classifiers and compare the results.
+ + SVM (which kernel is apprpriate?)
+ + Logistic regression
+ + Extend your data including $X_1^2$ and $X_2^2$ and fit a logistic regression again.

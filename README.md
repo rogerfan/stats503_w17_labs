@@ -7,4 +7,4 @@ STATS 503 Winter 2017 lab materials, University of Michigan
 * Lab 5 (02-03-2017): https://cdn.rawgit.com/rogerfan/stats503_w17_labs/12088477/Lab5_ggplot.html, [Solutions] (https://cdn.rawgit.com/rogerfan/stats503_w17_labs/12088477/Lab5_ggplot_sol.html)
 * Lab 6 (02-10-2017): https://cdn.rawgit.com/rogerfan/stats503_w17_labs/12088477/Lab_6_-_classification.html, [Solutions] (https://cdn.rawgit.com/rogerfan/stats503_w17_labs/739896f9/Lab6_classification_sols.html)
 * Lab 7 (02-17-2017): https://cdn.rawgit.com/rogerfan/stats503_w17_labs/110c8fcc/Lab7_logistic.html
-* Lab 8 (02-24-2017): https://cdn.rawgit.com/rogerfan/stats503_w17_labs/dad82d5f/Lab8-knnsvm.html, https://cdn.rawgit.com/rogerfan/stats503_w17_labs/dcfe782d/Lab8-knnsvmsol.html
+* Lab 8 (02-24-2017): https://cdn.rawgit.com/rogerfan/stats503_w17_labs/dad82d5f/Lab8-knnsvm.html, [Solutions] (https://cdn.rawgit.com/rogerfan/stats503_w17_labs/dcfe782d/Lab8-knnsvmsol.html)

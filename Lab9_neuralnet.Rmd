@@ -1,0 +1,255 @@
+---
+title: "Lab 9 - Stats 503"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+MNIST data, available at [http://yann.lecun.com/exdb/mnist/](http://yann.lecun.com/exdb/mnist/).
+
+```{r, message=F, warning=F}
+# Load data
+train_x = read.table('./data/mnist_train_x.txt')
+train_y = read.table('./data/mnist_train_y.txt')
+test_x = read.table('./data/mnist_test_x.txt')
+test_y = read.table('./data/mnist_test_y.txt')
+
+as.numeric(train_x[1,])
+
+# Visualize
+plot_im = function(vec, normalize=FALSE) {
+    if(normalize) {
+        vec = (vec - min(vec)) / (max(vec) - min(vec))
+    }
+    temp = matrix(as.numeric(vec), nrow=28)
+    temp = temp[,28:1]
+    image(1:28, 1:28, temp, col=gray((0:255)/255), xlab='', ylab='', yaxt='n')
+}
+
+plot_im(train_x[224,])
+train_y[224,]
+```
+
+
+## Neural Nets in R
+
+<!--
+Google "neural net r"
+    Look through some of the pages
+    Package options: neuralnet, nnet, caret, etc.
+    Look at neuralnet documentation
+ -->
+
+```{r, message=F, warning=F}
+# install.packages('neuralnet')
+require(neuralnet)
+?neuralnet
+```
+
+<!--
+Read through some of the documentation
+    In particular note
+        data: data must come as a data frame
+        hidden: choosing hidden node structure
+        algorithm: choosing backprop vs other algorithms
+        linear.output: output nodes are regression or binary
+    Look at "See Also", note plot.nn, compute
+ -->
+
+
+```{r, message=F, warning=F}
+train_y_ind = model.matrix(~factor(train_y$V1)-1)
+colnames(train_y_ind) = paste0('out', 0:9)
+
+train = cbind(train_x, train_y_ind)
+y_names = paste0('out', 0:9)
+x_names = paste0('V', 1:784)
+
+nn_single = neuralnet(
+    paste(paste(y_names, collapse='+'),
+          '~',
+          paste(x_names, collapse='+')),
+    train,
+    hidden=49,
+    linear.output=FALSE,
+    lifesign='full', lifesign.step=100)
+```
+
+<!--
+Look at compute documentation
+Look at the compute result first, check names, etc.
+ -->
+
+```{r, message=F, warning=F}
+yhat = compute(nn_single, train_x[1:200,])$net.result
+yhat = apply(yhat, 1, which.max)-1
+
+# Write a prediction function
+pred = function(nn, dat) {
+    yhat = compute(nn, dat)$net.result
+    yhat = apply(yhat, 1, which.max)-1
+    return(yhat)
+}
+
+mean(pred(nn_single, train_x) != train_y)
+mean(pred(nn_single, test_x) != test_y)
+
+```
+
+
+## Multiple Layers
+
+```{r, message=F, warning=F}
+nn_mult = neuralnet(
+    paste(paste(y_names, collapse='+'),
+          '~',
+          paste(x_names, collapse='+')),
+    train,
+    hidden=c(49, 30, 30),
+    linear.output=FALSE,
+    lifesign='full', lifesign.step=100)
+
+mean(pred(nn_mult, train_x) != train_y)
+mean(pred(nn_mult, test_x) != test_y)
+
+table(Predicted=pred(nn_mult, test_x), Expected=test_y$V1)
+```
+
+
+## Visualizing the first layer
+
+```{r, message=F, warning=F}
+par(mfrow=c(7, 7), mar=c(0, 0, 0, 0))
+for (i in 1:49) {
+    plot_im(nn_single$weights[[1]][[1]][-1,i])
+}
+
+# x11()
+par(mfrow=c(7, 7), mar=c(0, 0, 0, 0))
+for (i in 1:49) {
+    plot_im(nn_mult$weights[[1]][[1]][-1,i])
+}
+```
+
+## Using more nodes
+
+```{r, message=F, warning=F}
+nn_144 = neuralnet(
+    paste(paste(y_names, collapse='+'),
+          '~',
+          paste(x_names, collapse='+')),
+    train,
+    hidden=c(144),
+    linear.output=FALSE,
+    lifesign='full', lifesign.step=20)
+
+mean(pred(nn_144, train_x) != train_y)
+mean(pred(nn_144, test_x) != test_y)
+
+par(mfrow=c(12, 12), mar=c(0, 0, 0, 0))
+for (i in 1:144) {
+    plot_im(nn_144$weights[[1]][[1]][-1,i])
+}
+```
+
+
+## Neural Nets for Regression
+
+
+
+```{r, message=F, warning=F}
+require(MASS)
+data(Boston)
+
+?Boston
+head(Boston)
+
+Boston = as.data.frame(scale(Boston))
+
+train = Boston[1:400,]
+test = Boston[401:506,]
+
+
+varn = names(Boston)
+nn = neuralnet(
+    paste("medv ~", paste(varn[!(varn == "medv")], collapse=" + ")),
+    data=train,
+    hidden=c(5, 3),
+    linear.output=TRUE,
+    lifesign='full', lifesign.step=1000)
+
+plot(nn)
+
+pred_mse = function(nn, bos_dat) {
+    yhat = compute(nn, bos_dat[,-14])$net.result
+    sum((yhat - bos_dat[14])^2)/nrow(bos_dat)
+}
+
+pred_mse(nn, train)
+pred_mse(nn, test)
+```
+
+
+
+## Problems
+
+1. Write a function to estimate the 5-fold cross-validated test and training
+error on the Boston data using a neural network with any given hidden node
+structure.
+
+2. Compare the errors for several reasonable neural networks. Also compare
+them to linear regression. Which performs best? Does anything stand out?
+
+
+```{r, message=F, warning=F, include=F}
+require(sparsediscrim)
+set.seed(14616)
+
+cv_nn = function(num_nodes, folds) {
+    print(num_nodes)
+
+    cv_tot = 0.
+    train_tot = 0.
+
+    for(i in 1:5) {
+        nn = neuralnet(
+            paste("medv ~", paste(varn[!(varn == "medv")], collapse=" + ")),
+            data=Boston[folds[[i]]$training,],
+            hidden=num_nodes,
+            linear.output=TRUE,
+            threshold=0.02)
+
+        cv_tot = cv_tot + pred_mse(nn, Boston[folds[[i]]$test,])
+        train_tot = train_tot + pred_mse(nn, Boston[folds[[i]]$training,])
+    }
+    list(num=paste(num_nodes, collapse=", "), cv=cv_tot/5, train=train_tot/5)
+}
+
+pred_mse_lm = function(reg, bos_dat) {
+    yhat = predict(reg, bos_dat)
+    sum((yhat - bos_dat[14])^2)/nrow(bos_dat)
+}
+
+cv_lm = function(folds) {
+    cv_tot = 0.
+    train_tot = 0.
+
+    for(i in 1:5) {
+        reg = lm(medv ~ ., data=Boston[folds[[i]]$training,])
+
+        cv_tot = cv_tot + pred_mse_lm(reg, Boston[folds[[i]]$test,])
+        train_tot = train_tot + pred_mse_lm(reg, Boston[folds[[i]]$training,])
+    }
+    list(num="ols", cv=cv_tot/5, train=train_tot/5)
+}
+
+folds = cv_partition(1:nrow(Boston), num_folds=5)
+res = sapply(list(3, 5, c(5, 3)),
+             function(num) cv_nn(num, folds))
+
+res = data.frame(t(res))
+res = rbind(res, data.frame(cv_lm(folds)))
+res
+```
+
+

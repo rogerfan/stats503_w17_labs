@@ -1,0 +1,134 @@
+---
+title: "Lab 10 - Stats 503"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+## USA Presidential Election Results (2016)
+
+The dataset comes from Kaggle (https://www.kaggle.com/joelwilson/2012-2016-presidential-elections). Our goal today is to predict the winner candidate on each county based on demographic data. 
+
+Note: this analysis was part of a final project in Stats 503 - 2016 (but using the primary election results).
+```{r}
+votes = read.csv("Data/votes.csv", header = T)
+candidate = ifelse(votes$Trump > votes$Clinton, "Trump", "Clinton")
+table(candidate) / length(candidate)
+```
+
+Some variables are selected (see Data/county_facts_dictionary).
+```{r}
+county_demo = data.frame(State = votes$state_abbr,
+                          Age_5 = votes$AGE135214, 
+                          Age_6_18 = 100 - votes$AGE295214,
+                          Age_19_64 = 100 - votes$AGE135214 - votes$AGE295214 - votes$AGE295214,
+                          Age_65 = votes$AGE295214,
+                          Females = votes$SEX255214,
+                          White = votes$White,
+                          Black = votes$Black,
+                          Native = votes$RHI325214,
+                          Asian = votes$RHI425214,
+                          Hawaian = votes$RHI525214,
+                          Hispanic = votes$Hispanic,
+                          Foreignborn = votes$POP645213,
+                          OtherLanguageatHome = votes$NonEnglish,
+                          NoHighSchool = 100 - votes$Edu_highschool - votes$Edu_batchelors,
+                          HighSchool = votes$Edu_highschool,
+                          Bachelorplus = votes$Edu_batchelors,
+                          PopulationDensity = votes$population2014 / votes$LND110210)
+df = data.frame(candidate = factor(candidate), county_demo)
+```
+
+## Classification trees
+
+```{r}
+library(rpart)
+election_tr = rpart(candidate~., data=df)
+election_tr
+```
+
+### Plotting trees
+Basic plot
+```{r}
+plot(election_tr, compress = TRUE)
+text(election_tr, use.n = TRUE)
+```
+
+Some nicer options.
+```{r}
+library(rpart.plot)
+rpart.plot(election_tr, type = 4,extra = 1,clip.right.labs = F)
+```
+
+
+```{r}
+library(rattle)
+fancyRpartPlot(election_tr, cex = 0.5)
+```
+
+### Tuning parameters
+
+Cp controls the complexity of the tree (minsplit and minbucket too). Split controls the impurity measure.
+```{r}
+control = rpart.control(cp = 0.05, minsplit = 2)
+election_tr = rpart(candidate~., data=df,
+                  parms = list(split = "gini"), control = control)
+fancyRpartPlot(election_tr, cex = 0.5)
+```
+
+Cp can be chosen using cross-validation
+```{r}
+control = rpart.control(cp = 0.000, xxval = 100, minsplit = 2)
+election_tr = rpart(candidate ~ ., data = df, control = control)
+plotcp(election_tr)
+printcp(election_tr)
+selected_tr <- prune(election_tr, cp=   election_tr$cptable[which.min(election_tr$cptable[,"xerror"]),"CP"])
+fancyRpartPlot(selected_tr, cex = 0.5)
+```
+
+### Boundary plot
+https://jesusdaniel.shinyapps.io/Lab10-shinytree/
+
+## Random forest
+
+```{r}
+library(randomForest)
+election_rf = randomForest(candidate~., mtry= 2, ntree= 1000, data=df)
+election_rf
+varImpPlot(election_rf)
+```
+
+
+```{r}
+control = rpart.control(cp = 0.001, minsplit = 2)
+election_rf = randomForest(candidate~., mtry= 2, ntree= 1000, data=df, control = control)
+election_rf
+```
+
+```{r}
+tuneelection_rf = tuneRF(x = df[,-1], y = df$candidate)
+tuneelection_rf
+```
+
+
+### Boundary plot
+https://jesusdaniel.shinyapps.io/Lab10-shinyRF/
+
+Miscellaneous: Neural networks boundaries https://jesusdaniel.shinyapps.io/Lab10-shinynnet/
+
+## Exercises -  Boosting
+1. Use boosting to predict the candidate winner on each county. You can use the package _ada_ (which only works for binary problems), or _adabag_ (also works for multiclass problems).
+
+2. Compute the out-of-bag error and the variable importance plot of your classifier.
+
+3. Play with the parameters and find the best classifier. You are also allowed to play with the variables (include other variables from the original dataset, or use transformations on some of them). 
+
+```{r,eval=FALSE,echo=FALSE}
+#install.packages("ada")
+library(ada)
+election_ada = ada(candidate ~ ., data = df, loss = "exponential")
+plot(election_ada)
+varplot(election_ada, type = "scores")
+```
+
+

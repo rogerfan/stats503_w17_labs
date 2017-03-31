@@ -1,0 +1,53 @@
+---
+title: "PITCHf/x Clustering"
+output: html_document
+runtime: shiny
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, message=FALSE}
+require(ggplot2)
+require(gridExtra)
+require(cluster)
+require(data.table)
+require(RCurl)
+
+x = getURL('https://dl.dropboxusercontent.com/s/ne0vcgdcahla70z/pitches.txt?dl=0')
+dat = read.csv(textConnection(x))
+
+dat_norm = scale(dat)
+dis = dist(dat_norm)
+mds = as.data.frame(cmdscale(dis, k=2))
+
+dat_norm = scale(dat)
+pitch_ward = agnes(dat_norm, dis=FALSE, method='ward')
+```
+
+
+```{r eruptions, echo=FALSE}
+inputPanel(
+    sliderInput("K", label="Number of clusters:", ticks=FALSE,
+                min=1, max=15, value=1, step=1)
+)
+
+renderPlot({
+    cluster = as.factor(cutree(pitch_ward, k=as.numeric(input$K)))
+    mds_temp = cbind(mds, cluster)
+    dat_temp = cbind(dat, cluster)
+
+    g1 = ggplot(data=mds_temp, aes(x=V2, y=V1, color=cluster)) +
+        geom_point(alpha=0.8, size=1.2) + theme(legend.position="none")
+    g2 = ggplot(data=dat_temp, aes(x=x0, y=z0, color=cluster)) +
+        geom_point(alpha=0.8, size=1.2) + theme(legend.position="none")
+    g3 = ggplot(data=dat_temp, aes(x=pfx_x, y=pfx_z, color=cluster)) +
+        geom_point(alpha=0.8, size=1.2) + theme(legend.position="none")
+    g4 = ggplot(data=dat_temp, aes(x=pfx_x, y=start_speed, color=cluster)) +
+        geom_point(alpha=0.8, size=1.2) + theme(legend.position="none")
+    grid.arrange(g1, g2, g3, g4, ncol=2)
+}, height=700)
+```
+

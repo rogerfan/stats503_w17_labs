@@ -1,0 +1,227 @@
+---
+title: "Lab 11 - Stats 503"
+output:
+  html_document: default
+---
+
+PITCHf/x data from MLB. Contains variables:
+
+* `start_speed`: Initial speed in mph
+* `pfx_x`, `pfx_z`: Horizontal and vertical movement relative to a ball thrown
+with zero spin.
+* `x0`, `z0`: Horizontal and vertical location of the release point of the pitch.
+
+```{r, message=F, warning=F}
+require(ggplot2)
+require(reshape2)
+require(gridExtra)
+
+# require(pitchRx)
+# require(plyr)
+# rawdat = scrape(start = "2016-10-01", end = "2016-10-01")
+# vars_pitch = c('start_speed', 'pfx_x', 'pfx_z', 'x0', 'z0', 'num', 'url')
+# vars_atbat = c('num', 'url', 'p_throws')
+
+# dat = join(rawdat$atbat[,vars_atbat], rawdat$pitch[,vars_pitch],
+#             by=c('num', 'url'), type='inner')
+# dat = dat[complete.cases(dat),]
+# dat = dat[1:1500,]
+
+# keepvars = c('start_speed', 'pfx_x', 'pfx_z', 'x0', 'z0')
+# write.csv(dat[,keepvars], file='./data/pitches.txt', row.names=FALSE)
+
+dat = read.csv('./data/pitches.txt')
+
+```
+
+
+## Visualization
+
+```{r, message=F, warning=F}
+dat_norm = scale(dat)
+dis = dist(dat_norm)
+mds = as.data.frame(cmdscale(dis, k=2))
+
+q1 = ggplot(mds, aes(x=V2, y=V1)) + geom_point(alpha=0.6)
+q2 = ggplot(dat, aes(x=pfx_x, y=pfx_z)) + geom_point(alpha=0.6)
+q3 = ggplot(dat, aes(x=x0, y=z0)) + geom_point(alpha=0.6)
+q4 = ggplot(dat, aes(x=pfx_x, y=start_speed)) + geom_point(alpha=0.6)
+grid.arrange(q1, q2, q3, q4, ncol=2)
+```
+
+
+## Hierarchical Clustering
+
+Packages:
+
+* `hclust` in base R.
+* `agnes` in the `cluster` package.
+
+```{r, message=F, warning=F}
+require(cluster)
+
+pitch_sing = agnes(dat_norm, diss=FALSE, method='single')
+pitch_comp = agnes(dat_norm, diss=FALSE, method='complete')
+pitch_ward = agnes(dat_norm, diss=FALSE, method='ward')
+
+sil_sing = silhouette(cutree(pitch_sing, k=5), dis)
+sil_comp = silhouette(cutree(pitch_comp, k=5), dis)
+sil_ward = silhouette(cutree(pitch_ward, k=5), dis)
+
+```
+
+```{r, message=F, warning=F}
+require(ggdendro)
+
+# plot(pitch_sing)
+
+# ggdendrogram(as.dendrogram(pitch_sing), leaf_labels=FALSE, labels=FALSE)
+# summary(sil_sing)
+# plot(sil_sing)
+
+# ggdendrogram(as.dendrogram(pitch_comp), leaf_labels=FALSE, labels=FALSE)
+# summary(sil_comp)
+# plot(sil_comp)
+
+ggdendrogram(as.dendrogram(pitch_ward), leaf_labels=FALSE, labels=FALSE)
+summary(sil_ward)
+plot(sil_ward)
+
+```
+
+
+## Exploring numbers of clusters
+
+https://rogerfan.shinyapps.io/lab11-shiny/
+
+
+## K-Means
+
+We can use the built-in function `kmeans` to do k-means clustering. The basic
+algorithm can be selected with the option `algorithm='Lloyd'`, but the default
+algorithm has several optimizations that result in better performance.
+
+K-means is very sensitive to initial values, so as a rule always use multiple
+starts and choose the best one.
+
+```{r, message=F, warning=F}
+# ?kmeans
+set.seed(23462)
+
+clust_kmeans = kmeans(dat_norm, 5, iter.max=100, algorithm='Lloyd')
+clust_kmeans = kmeans(dat_norm, 5)
+clust_kmeans
+
+```
+
+```{r, message=F, warning=F}
+set.seed(625723)  # For a bad example
+clust_kmeans2 = kmeans(dat_norm, 5)
+
+mds_temp = cbind(
+    mds, as.factor(clust_kmeans$cluster), as.factor(clust_kmeans2$cluster))
+names(mds_temp) = c('V1', 'V2', 'clust1', 'clust2')
+
+gp1 = ggplot(mds_temp, aes(x=V2, y=V1, color=clust1)) +
+    geom_point() + theme(legend.position="none")
+gp2 = ggplot(mds_temp, aes(x=V2, y=V1, color=clust2)) +
+    geom_point() + theme(legend.position="none")
+grid.arrange(gp1, gp2, ncol=2)
+
+clust_kmeans$tot.withinss
+clust_kmeans2$tot.withinss
+clust_kmeans$betweenss
+clust_kmeans2$betweenss
+
+```
+
+
+## K-Means++
+
+A smarter way of initializing K-Means that usually results in better
+performance. An implementation is available in the `flexclust` package, but the
+basic algorithm is easy to implement.
+
+The algorithm is:
+
+* For each data point, compute the distance to the nearest existing center.
+* Choose a new data point at random to be a center, weighting the draw
+so the probability that a point is chose is proportional to its squared distance.
+* Repeat until K centers are chosen.
+* Apply K-means with those centers as the initial ones.
+
+This usually performs better and more consistently than K-means, but you should
+still use multiple initializations.
+
+```{r, message=F, warning=F}
+require(matrixStats)
+
+kpp_init = function(dat, K) {
+    x = as.matrix(dat)
+    n = nrow(x)
+
+    # Randomly choose a first center
+    centers = matrix(NA, nrow=K, ncol=ncol(x))
+    centers[1,] = as.matrix(x[sample(1:n, 1),])
+
+    for (k in 2:K) {
+        # Calculate dist^2 to closest center for each point
+        dists = matrix(NA, nrow=n, ncol=k-1)
+        for (j in 1:(k-1)) {
+            temp = sweep(x, 2, centers[j,], '-')
+            dists[,j] = rowSums(temp^2)
+        }
+        dists = rowMins(dists)
+
+        # Draw next center with probability propor to dist^2
+        cumdists = cumsum(dists)
+        prop = runif(1, min=0, max=cumdists[n])
+        centers[k,] = as.matrix(x[min(which(cumdists > prop)),])
+    }
+    return(centers)
+}
+
+clust_kpp = kmeans(dat_norm, kpp_init(dat_norm, 5), iter.max=100, algorithm='Lloyd')
+
+```
+
+
+## Exercise: Gaussian Mixture Models
+
+* Generate a 2-d dataset with 50 points from a $N((0, 0), 6 \times I)$ distribution,
+50 from a $N((4, 4), 0.1 \times I)$, and 50 from a $N((-4, 0), 0.1 \times I)$.
+* Fit a Gaussian mixture model on the data and generate cluster labels.
+To do this, investigate the `mvnormalmixEM` function in the package `mixtools`.
+Keep in mind that GMM can be sensitive to initial values.
+To generate the labels, use `$posterior` from the result.
+* Fit a K-means model on the data and generate cluster labels.
+* Plot the results from both models side-by-side. Comment on the results.
+
+```{r, message=F, warning=F, eval=F, echo=F}
+require("mixtools")
+set.seed(28748)
+
+n_each = 50
+x1 = matrix(rnorm(n_each*2, sd=sqrt(6)), ncol=2)
+x2 = sweep(matrix(rnorm(n_each*2, sd=sqrt(0.1)), ncol=2), 1, c(4, 4), '+')
+x3 = sweep(matrix(rnorm(n_each*2, sd=sqrt(0.1)), ncol=2), 2, c(-4, 4), '+')
+
+x = as.data.frame(rbind(x1, x2, x3))
+ggplot(x, aes(x=V1, y=V2)) + geom_point()
+```
+
+```{r, message=F, warning=F, eval=F, echo=F}
+gmm = mvnormalmixEM(as.matrix(x), k=3)
+kmeans = kmeans(x, 3)
+
+x$gmm = as.factor(apply(gmm$posterior, 1, which.max))
+x$kmeans = as.factor(kmeans$cluster)
+x_melt = melt(x, id.vars=c('V1', 'V2'))
+
+ggplot(x_melt, aes(x=V1, y=V2, color=value)) +
+    geom_point() + facet_grid(~variable) + theme(legend.position='none')
+
+```
+
+
+

@@ -10,3 +10,4 @@ STATS 503 Winter 2017 lab materials, University of Michigan
 * Lab 8 (02-24-2017): [Lab](https://cdn.rawgit.com/rogerfan/stats503_w17_labs/dad82d5f/Lab8-knnsvm.html), [Solutions](https://cdn.rawgit.com/rogerfan/stats503_w17_labs/dcfe782d/Lab8-knnsvmsol.html)
 * Lab 9 (03-10-2017): [Lab](https://rawgit.com/rogerfan/stats503_w17_labs/master/Lab9_neuralnet.html)
 * Lab 10 (03-17-2017): [Lab](https://rawgit.com/rogerfan/stats503_w17_labs/master/Lab10-trees-bag-boost.html)
+* Lab 11 (03-31-2017): [Lab](https://rawgit.com/rogerfan/stats503_w17_labs/master/Lab11-cluster.html)

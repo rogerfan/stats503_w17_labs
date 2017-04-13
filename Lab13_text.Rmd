@@ -1,0 +1,134 @@
+---
+title: "Lab 13 - Stats 503"
+output:
+  html_document: default
+---
+
+## State of the Union data processing
+
+You can find the results of this Python script on Canvas at `labs/data/sotu.csv`
+and `labs/data/sotu_meta.csv`.
+
+
+```{python, eval=F}
+import gzip
+
+with gzip.open('./data/stateoftheunion1790-2017.txt.gz', "rt") as fid:
+    # Header
+    for linenum, line in enumerate(fid):
+        if 'CONTENTS' in line:
+            next(fid)
+            break
+
+    # Meta-data
+    sname = []
+    pres = []
+    year = []
+    for linenum, line in enumerate(fid):
+        if '***' in line:
+            break
+
+        sname.append(line.strip().replace(',', ''))
+        pres.append(line.split(',')[0].strip())
+        year.append(line.split(',')[-1].strip())
+
+    # Speech data
+    rawdat = fid.read()
+
+# Clean speech data
+speeches = rawdat.split('***')
+speeches = speeches[:-2]  # Remove some non-speeches at the end
+for i, speech in enumerate(speeches):
+    speeches[i] = '  '.join(speech.split('\n')[5:])
+
+# Save
+with open('./data/sotu.csv', 'w') as f:
+    f.write('\n'.join(speeches))
+
+with open('./data/sotu_meta.csv', 'w') as f:
+    for dat in zip(sname, pres, year):
+        f.write(', '.join(dat) + '\n')
+```
+
+
+```{r, message=F, warning=F}
+sotu = scan('./data/sotu.csv', what='', sep='\n')
+sotu_meta = read.csv('./data/sotu_meta.csv', header=FALSE)
+names(sotu_meta) = c('speech', 'president', 'year')
+
+head(sotu_meta)
+sotu[1]
+```
+
+
+## Manipulating a text corpus
+
+```{r, message=F, warning=F}
+require(ggplot2)
+require(tm)
+require(SnowballC)
+
+vect = VectorSource(sotu)
+corpus = Corpus(vect)
+
+inspect(corpus[1])
+
+corpus = tm_map(corpus, content_transformer(tolower))
+corpus = tm_map(corpus, removePunctuation)
+corpus = tm_map(corpus, removeNumbers)
+corpus = tm_map(corpus, removeWords, stopwords("english"))
+
+inspect(corpus[1])
+corpus = tm_map(corpus, stemDocument)
+corpus = tm_map(corpus, stripWhitespace)
+
+inspect(corpus[1])
+```
+
+
+## Converting to a Document-Term Matrix
+
+```{r, message=F, warning=F}
+dtm = DocumentTermMatrix(corpus)
+dtm = removeSparseTerms(dtm, 0.98)
+
+```
+
+
+
+## Useful Transformations
+
+Text data is very often transformed to be in terms of
+Term Frequency-Inverse Document Frequency (tf-idf). This is because raw
+frequencies are a very bad input for many methods.
+
+
+```{r, message=F, warning=F}
+dat_tfidf = weightTfIdf(dtm)
+
+inspect(dat_tfidf)
+```
+
+```{r, message=F, warning=F}
+dist_tf = dist(dat_tf)
+dist_tfidf = dist(dat_tfidf)
+
+mds_tf = as.data.frame(cmdscale(dist_tf, k=2))
+mds_tfidf = as.data.frame(cmdscale(dist_tfidf, k=2))
+
+names(mds_tf) = c('x', 'y')
+names(mds_tfidf) = c('x', 'y')
+
+mds_tf$year = sotu_meta$year
+mds_tfidf$year = sotu_meta$year
+
+ggplot(mds_tf, aes(x=x, y=y, color=year)) +
+    geom_point() + ggtitle('MDS: TF')
+ggplot(mds_tfidf, aes(x=x, y=y, color=year)) +
+    geom_point() + ggtitle('mds: TF-IDF')
+
+```
+
+
+
+

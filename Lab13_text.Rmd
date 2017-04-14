@@ -66,6 +66,7 @@ sotu[1]
 ```{r, message=F, warning=F}
 require(ggplot2)
 require(reshape2)
+require(gridExtra)
 require(tm)
 require(SnowballC)
 
@@ -91,8 +92,9 @@ inspect(corpus[1])
 
 ```{r, message=F, warning=F}
 dtm = DocumentTermMatrix(
-    corpus, control=list(bounds=list(global=c(0.05, 0.7)*length(corpus))))
+    corpus, control=list(bounds=list(global=c(0.05, 0.8)*length(corpus))))
 
+inspect(dtm)
 ```
 
 ## Useful Transformations
@@ -104,28 +106,59 @@ frequencies are a very bad input for many methods.
 Alternatives: Use other distance measures such as cosine distance.
 
 ```{r, message=F, warning=F}
+dtm_mat = as.matrix(dtm)
+dat_tfnorm = dtm_mat / rowSums(dtm_mat)
+
 dat_tfidf = weightTfIdf(dtm)
 
 inspect(dat_tfidf)
+
+cos_dist = function(mat){
+    numer = tcrossprod(mat)
+    denom1 = sqrt(apply(mat, 1, crossprod))
+    denom2 = sqrt(apply(mat, 1, crossprod))
+    1 - numer / outer(denom1,denom2)
+}
 ```
 
-```{r, message=F, warning=F}
+```{r, message=F, warning=F, fig.width=7, fig.height=7}
 dist_tf = dist(dtm)
+dist_tf_norm = dist(dat_tfnorm)
 dist_tfidf = dist(dat_tfidf)
+dist_cos = cos_dist(dtm_mat)
 
 mds_tf = as.data.frame(cmdscale(dist_tf, k=2))
+mds_tf_norm = as.data.frame(cmdscale(dist_tf_norm, k=2))
 mds_tfidf = as.data.frame(cmdscale(dist_tfidf, k=2))
+mds_cos = as.data.frame(cmdscale(dist_cos, k=2))
 
 names(mds_tf) = c('x', 'y')
+names(mds_tf_norm) = c('x', 'y')
 names(mds_tfidf) = c('x', 'y')
+names(mds_cos) = c('x', 'y')
 
 mds_tf$year = sotu_meta$year
+mds_tf_norm$year = sotu_meta$year
 mds_tfidf$year = sotu_meta$year
+mds_cos$year = sotu_meta$year
 
-ggplot(mds_tf, aes(x=x, y=y, color=year)) +
-    geom_point() + ggtitle('MDS: TF')
-ggplot(mds_tfidf, aes(x=x, y=y, color=year)) +
-    geom_point() + ggtitle('MDS: TF-IDF')
+gp1 = ggplot(mds_tf, aes(x=x, y=y, color=year)) +
+    geom_point() + ggtitle('MDS: TF') +
+    xlab('') + ylab('') +
+    theme(legend.position=c(0.02,0.02), legend.justification=c(0,0),
+          legend.background=element_rect(color="lightgrey"),
+          legend.title=element_blank(),
+          legend.box="horizontal")
+gp2 = ggplot(mds_tf_norm, aes(x=x, y=y, color=year)) +
+    geom_point() + ggtitle('MDS: TF-Norm') +
+    xlab('') + ylab('') + theme(legend.position='none')
+gp3 = ggplot(mds_tfidf, aes(x=x, y=y, color=year)) +
+    geom_point() + ggtitle('MDS: TF-IDF') +
+    xlab('') + ylab('') + theme(legend.position='none')
+gp4 = ggplot(mds_cos, aes(x=x, y=y, color=year)) +
+    geom_point() + ggtitle('MDS: Cosine Dist') +
+    xlab('') + ylab('') + theme(legend.position='none')
+grid.arrange(gp1, gp2, gp3, gp4, ncol=2)
 
 ```
 

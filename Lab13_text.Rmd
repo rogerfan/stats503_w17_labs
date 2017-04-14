@@ -65,6 +65,7 @@ sotu[1]
 
 ```{r, message=F, warning=F}
 require(ggplot2)
+require(reshape2)
 require(tm)
 require(SnowballC)
 
@@ -76,7 +77,7 @@ inspect(corpus[1])
 corpus = tm_map(corpus, content_transformer(tolower))
 corpus = tm_map(corpus, removePunctuation)
 corpus = tm_map(corpus, removeNumbers)
-corpus = tm_map(corpus, removeWords, stopwords("english"))
+corpus = tm_map(corpus, removeWords, stopwords('english'))
 
 inspect(corpus[1])
 corpus = tm_map(corpus, stemDocument)
@@ -89,12 +90,10 @@ inspect(corpus[1])
 ## Converting to a Document-Term Matrix
 
 ```{r, message=F, warning=F}
-dtm = DocumentTermMatrix(corpus)
-dtm = removeSparseTerms(dtm, 0.98)
+dtm = DocumentTermMatrix(
+    corpus, control=list(bounds=list(global=c(0.05, 0.7)*length(corpus))))
 
 ```
-
-
 
 ## Useful Transformations
 
@@ -102,6 +101,7 @@ Text data is very often transformed to be in terms of
 Term Frequency-Inverse Document Frequency (tf-idf). This is because raw
 frequencies are a very bad input for many methods.
 
+Alternatives: Use other distance measures such as cosine distance.
 
 ```{r, message=F, warning=F}
 dat_tfidf = weightTfIdf(dtm)
@@ -110,7 +110,7 @@ inspect(dat_tfidf)
 ```
 
 ```{r, message=F, warning=F}
-dist_tf = dist(dat_tf)
+dist_tf = dist(dtm)
 dist_tfidf = dist(dat_tfidf)
 
 mds_tf = as.data.frame(cmdscale(dist_tf, k=2))
@@ -125,10 +125,36 @@ mds_tfidf$year = sotu_meta$year
 ggplot(mds_tf, aes(x=x, y=y, color=year)) +
     geom_point() + ggtitle('MDS: TF')
 ggplot(mds_tfidf, aes(x=x, y=y, color=year)) +
-    geom_point() + ggtitle('mds: TF-IDF')
+    geom_point() + ggtitle('MDS: TF-IDF')
 
 ```
 
+
+## Latent Dirichlet Allocation
+
+```{r, message=F, warning=F}
+require(topicmodels)
+dtm_modern = dtm[sotu_meta$year >= 1946,]
+sotu_meta_modern = sotu_meta[sotu_meta$year >= 1946,]
+
+mod_lda = LDA(dtm_modern, 4)
+
+```
+
+```{r, message=F, warning=F}
+terms = as.matrix(terms(mod_lda, 10))
+terms
+
+```
+
+```{r, message=F, warning=F}
+topic_probs = as.data.frame(mod_lda@gamma)
+topic_probs$year = sotu_meta_modern$year
+
+ggplot(melt(topic_probs, id.vars='year'), aes(x=year, y=value, color=variable)) +
+    stat_smooth(se=FALSE, span=0.1)
+
+```
 
 
 
